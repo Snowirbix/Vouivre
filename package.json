@@ -1,6 +1,6 @@
 {
 	"name": "vouivre",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Lighweight reactive library with templating and data binding.",
 	"repository": {
 		"type": "git",
