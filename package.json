@@ -2,6 +2,10 @@
 	"name": "vouivre",
 	"version": "1.0.0",
 	"description": "Lighweight reactive library with templating and data binding.",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/Snowirbix/Vouivre.git"
+	},
 	"type": "module",
 	"main": "dist/vouivre.cjs.js",
 	"module": "dist/vouivre.es.js",
