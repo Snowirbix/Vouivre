@@ -1,0 +1,71 @@
+import Service from "./service";
+import Binding from "./binding";
+import vouivre, { highlightRefresh } from "./vouivre";
+
+class Interpolation {
+	constructor(element, text, bindings) {
+		this.element = element;
+		this.text = text;
+		this.bindings = bindings;
+	}
+}
+export default class InterpolationService extends Service {
+	interpolations;
+	regex;
+
+	constructor() {
+		super("interpolation");
+		this.interpolations = new Map();
+		this.xpath = ".//descendant-or-self::*[not(self::script or self::style)][contains(text(), '{')]";
+		this.regex = /\{(.+?)\}/g;
+	}
+
+	run(context, model, event, lookup) {
+		this.search(context);
+		let interpolations = this.createBindings(model, event, lookup);
+		for (let interp of interpolations) {
+			for (let binding of interp.bindings) {
+				this.callback("update", binding);
+			}
+		}
+	}
+
+	clear(context) {
+		this.search(context);
+		for (let element of this.elements) {
+			this.interpolations.delete(element);
+			if (element.__bindings) {
+				element.__bindings = undefined;
+			}
+		}
+	}
+
+	createBindings(model, event, lookup) {
+		for (let element of this.elements) {
+			var text = element.textContent;
+			let result;
+			let bindings = [];
+			while ((result = this.regex.exec(text))) {
+				let binding = new Binding(element, this, result[1], [], model, event, lookup);
+				bindings.push(binding);
+			}
+			if (bindings.length > 0) {
+				this.interpolations.set(element, new Interpolation(element, text, bindings));
+			}
+		}
+		return this.elements.map((e) => this.interpolations.get(e));
+	}
+
+	callback(name, binding) {
+		if (name != "update") return;
+
+		var interp = this.interpolations.get(binding.element);
+		binding.element.textContent = interp.text.replace(this.regex, (match, $1) => {
+			var _binding = interp.bindings.find((b) => b.expression === $1);
+			return binding == _binding ? _binding.getValue() : _binding.cachedValue;
+		});
+		if (vouivre.debug) {
+			highlightRefresh(binding.element);
+		}
+	}
+}

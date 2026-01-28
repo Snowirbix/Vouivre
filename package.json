@@ -1,0 +1,30 @@
+{
+	"name": "vouivre",
+	"version": "1.0.0",
+	"description": "Lighweight reactive library with templating and data binding.",
+	"type": "module",
+	"main": "dist/vouivre.cjs.js",
+	"module": "dist/vouivre.es.js",
+	"exports": {
+		".": {
+			"import": "./dist/vouivre.es.js",
+			"require": "./dist/vouivre.cjs.js"
+		}
+	},
+	"files": [
+		"dist",
+		"README.md"
+	],
+	"scripts": {
+		"build": "vite build"
+	},
+	"keywords": [],
+	"author": "Alban Gaudin",
+	"license": "MIT",
+	"devDependencies": {
+		"vite": "^7.3.1"
+	},
+	"dependencies": {
+		"lodash": "^4.17.23"
+	}
+}

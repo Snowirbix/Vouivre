@@ -1,0 +1,14 @@
+node_modules/
+
+# Build
+dist/
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+*.tgz
