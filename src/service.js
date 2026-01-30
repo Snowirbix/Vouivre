@@ -4,56 +4,50 @@ import vouivre, { highlightRefresh } from "./vouivre";
 export default class Service {
 	name;
 	callbacks;
-	xpath;
-	elements;
 	bindings;
 
 	constructor(name = "", callbacks = {}) {
 		this.name = name.split("-");
 		this.callbacks = callbacks;
-		this.bindings = new Map();
+		this.bindings = [];
 
 		this.name.unshift(vouivre.prefix);
 		if (this.name[this.name.length - 1] == "*") {
 			this.name.pop();
 			this.wildcard = true;
-			this.xpath = `.//descendant-or-self::*[@*[starts-with(name(), '${this.name.join("-")}')]]`;
-		} else {
-			this.xpath = `.//descendant-or-self::*[@${this.name.join("-")}]`;
 		}
 	}
 
-	search(context) {
-		const result = document.evaluate(this.xpath, context, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+	bind(elements, model, event, lookup) {
+		let bindings = this.createBindings(elements, model, event, lookup);
 
-		this.elements = [];
-		for (let i = 0; i < result.snapshotLength; i++) {
-			this.elements.push(result.snapshotItem(i));
-		}
-	}
-
-	run(context, model, event, lookup) {
-		this.search(context);
-		let bindings = this.createBindings(model, event, lookup);
 		for (let binding of bindings) {
-			this.callback("bind", binding);
-			this.callback("update", binding);
+			if ("bind" in this.callbacks) {
+				this.callbacks.bind.call(binding, binding.element, binding.getValue());
+			}
+			this.update(binding);
 		}
 	}
 
-	clear(context) {
-		this.search(context);
-		for (let element of this.elements) {
-			this.bindings.delete(element);
-			if (element.__bindings) {
-				element.__bindings = undefined;
+	unbind(context) {
+		for (let i = this.bindings.length - 1; i >= 0; i--) {
+			let binding = this.bindings[i];
+			if (context.contains(binding.element)) {
+				binding.unbind();
+				if (binding.element.__bindings) {
+					binding.element.__bindings = undefined;
+				}
+				this.bindings.splice(i, 1);
 			}
 		}
 	}
 
-	createBindings(model, event, lookup) {
-		for (let element of this.elements) {
-			for (let attr of element.attributes) {
+	createBindings(elements, model, event, lookup) {
+		let newBindings = [];
+		for (let element of elements) {
+			let attributes = [...element.attributes]; // copy the array because sometimes services can add/remove attributes inbetween and cause issues
+			for (let attr of attributes) {
+				if (attr.name == `${vouivre.prefix}-scope`) continue;
 				let attrName = attr.name.split("-");
 				let name = this.name.slice(); // clone array
 				while (name.length > 0 && attrName[0] == name[0]) {
@@ -62,6 +56,7 @@ export default class Service {
 				}
 				if (name.length > 0) continue;
 				if (attrName.length > 0 && !this.wildcard) continue;
+
 				let binding = new Binding(
 					element,
 					this,
@@ -71,18 +66,20 @@ export default class Service {
 					event,
 					lookup,
 				);
-				this.bindings.set(element, binding);
+				element.removeAttribute(attr.name);
+				this.bindings.push(binding);
+				newBindings.push(binding);
 			}
 		}
-		return this.elements.map((e) => this.bindings.get(e));
+		return newBindings;
 	}
 
-	callback(name, binding) {
-		if (name in this.callbacks) {
-			this.callbacks[name].call(binding, binding.element, binding.getValue());
-			if (vouivre.debug) {
-				highlightRefresh(binding.element);
-			}
+	update(binding) {
+		if ("update" in this.callbacks) {
+			this.callbacks.update.call(binding, binding.element, binding.getValue());
+			// if (vouivre.debug) {
+			// 	highlightRefresh(binding.element);
+			// }
 		}
 	}
 }

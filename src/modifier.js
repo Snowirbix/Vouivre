@@ -4,11 +4,17 @@ export default class Modifier {
 		this.callbacks = callbacks;
 	}
 
-	read(value, ...args) {
-		return this.callbacks.read.call(this, value, ...args);
+	setup(binding, ...args) {
+		if ("setup" in this.callbacks) {
+			this.callbacks.setup.call(binding, ...args);
+		}
 	}
 
-	write(value, ...args) {
-		return this.callbacks.write.call(this, value, ...args);
+	read(binding, value, ...args) {
+		return this.callbacks.read.call(binding, value, ...args);
+	}
+
+	write(binding, value, ...args) {
+		return this.callbacks.write.call(binding, value, ...args);
 	}
 }

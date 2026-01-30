@@ -21,6 +21,7 @@ export default class Binding {
 	service;
 	expression;
 	args;
+	fnArgs = [];
 	path;
 	// _path (for 'lodash path') is an array of properties
 	_path;
@@ -37,47 +38,64 @@ export default class Binding {
 		this.expression = expression;
 		this.args = args;
 		this.model = model;
+		this.event = event;
+		this.lookup = lookup;
 
 		let { path, modifierName, modifierArgs } = this.#processBindingExpression(expression);
 		this.path = path;
+		this._path = toPath(path);
+		this.#getScopeElements();
+
 		this.modifier = vouivre.modifiers.find(({ name }) => name === modifierName);
 		this.modifierArgs = modifierArgs;
+		if (this.modifier) {
+			this.#watchModifierArgs();
+			this.modifier.setup(this, ...this.#resolveModifierArgs());
+		}
 
-		this.#getScopeElements();
-		this._path = toPath(path);
-		let dependency = this.watch(this._path);
+		let { dependency, _path } = this.watch(this._path);
 		this.context = dependency;
+		this._path = _path;
 
-		event.addEventListener("requestUpdate", (event) => {
-			const { target, key } = event.detail;
-			const staleWatches = new Set();
-			let accepted = false;
-
-			for (const watch of this.watchlist) {
-				const result = this.#isWatchAffected(watch, target, key, lookup);
-
-				if (!result.affected) continue;
-
-				accepted = true;
-				if (result.stale) {
-					staleWatches.add(watch);
-				}
-			}
-
-			if (staleWatches.size > 0) {
-				this.watchlist = this.watchlist.filter((w) => !staleWatches.has(w));
-				for (const watch of staleWatches) {
-					this.watch(watch.path);
-				}
-			}
-
-			if (accepted) this.service.callback("update", this);
-		});
+		this.listener = this.#handleUpdate.bind(this);
+		event.addEventListener("requestUpdate", this.listener);
 
 		if (!this.element.__bindings) {
 			this.element.__bindings = [];
 		}
 		this.element.__bindings.push(this);
+	}
+
+	unbind() {
+		this.event.removeEventListener("requestUpdate", this.listener);
+		this.watchlist.length = 0;
+	}
+
+	#handleUpdate(event) {
+		const { target, key } = event.detail;
+		const staleWatches = new Set();
+		let accepted = false;
+
+		for (const watch of this.watchlist) {
+			const result = this.#isWatchAffected(watch, target, key, this.lookup);
+
+			if (!result.affected) continue;
+
+			accepted = true;
+			if (result.stale) {
+				staleWatches.add(watch);
+			}
+		}
+
+		if (staleWatches.size > 0) {
+			this.watchlist = this.watchlist.filter((w) => !staleWatches.has(w));
+			for (const watch of staleWatches) {
+				const _path = watch.wildcard ? [...watch._path, "*"] : watch._path;
+				this.watch(_path);
+			}
+		}
+
+		if (accepted) this.service.update(this);
 	}
 
 	#processBindingExpression(expr) {
@@ -93,19 +111,30 @@ export default class Binding {
 	}
 
 	#isWatchAffected(watch, target, key, parentLookup) {
-		if (watch.dependency === target && watch.path.at(-1) === key) {
+		if (watch.dependency === target && watch._path.at(-1) === key) {
 			return { affected: true, stale: false };
 		}
 
 		// check parent object change
 		let node = watch.dependency;
-		let pathIndex = watch.path.length - 2;
+		let pathIndex = watch._path.length - 2;
 
 		while ((node = parentLookup.get(node))) {
-			if (node === target && watch.path[pathIndex] === key) {
+			// trigger only when object ref changes
+			if (node === target && watch._path[pathIndex] === key) {
 				return { affected: true, stale: true };
 			}
 			pathIndex--;
+		}
+
+		if (watch.wildcard) {
+			let node = target;
+			do {
+				// trigger if update is on a descendant of dependency
+				if (node == watch.dependency) {
+					return { affected: true, stale: false };
+				}
+			} while ((node = parentLookup.get(node)));
 		}
 
 		return { affected: false };
@@ -113,6 +142,29 @@ export default class Binding {
 
 	#getScopeElements() {
 		this.scopeElements = this.element.parents(`*[${vouivre.prefix}-scope]`);
+	}
+
+	#watchModifierArgs() {
+		for (let arg of this.modifierArgs) {
+			if (arg.startsWith("$")) {
+				this.watch(arg);
+			}
+			if (arg.startsWith("@")) {
+				this.watch(arg.substring(1));
+			}
+		}
+	}
+
+	#resolveModifierArgs() {
+		return this.modifierArgs.map((arg) => {
+			if (arg.startsWith("$")) {
+				return this.getValueFrom(arg);
+			}
+			if (arg.startsWith("@")) {
+				return this.getValueFrom(arg.substring(1));
+			}
+			return arg;
+		});
 	}
 
 	getScopeValues() {
@@ -140,16 +192,28 @@ export default class Binding {
 	}
 
 	#resolveFromScopes(path) {
-		path.pop();
+		path.pop(); // pop the property name, we only want the dependency object ref
 		for (let scopeEl of this.scopeElements) {
 			if (path[0] == scopeEl.__scopeName) {
-				path.shift();
+				path.shift(); // shift the scope name
 				return path.length ? get(scopeEl.__context, path) : scopeEl.__context;
 			}
 		}
 	}
 
 	watch(originalPath) {
+		if (!(originalPath instanceof Array)) {
+			originalPath = toPath(originalPath);
+		} else {
+			originalPath = [...originalPath];
+		}
+		const watch = {};
+
+		if (originalPath.at(-1) == "*") {
+			watch.wildcard = true;
+			originalPath.pop();
+		}
+
 		const path = [...originalPath];
 		const root = path[0];
 
@@ -161,34 +225,57 @@ export default class Binding {
 			}
 			if (path[0] == "$index") {
 				let scopeEl = this.scopeElements[depth];
-				this.watchlist.push({
-					dependency: scopeEl.__array,
-					path: [...originalPath, "length"],
-				});
-				return undefined;
+				watch.dependency = scopeEl.__array;
+				watch._path = [...originalPath, "length"];
+				this.watchlist.push(watch);
+				return { dependency: undefined, _path: originalPath };
 			}
 		}
-		let dependency;
 		if (root in this.model) {
-			dependency = this.#resolveFromModel(path);
+			watch.dependency = this.#resolveFromModel(path);
+			watch._path = originalPath;
+			this.watchlist.push(watch);
+			return watch;
 		} else {
-			// didn't resolve the fullpath from scopes for the watch path thing
-			// but if the scope is stale this child element will be removed anyway
-			dependency = this.#resolveFromScopes(path);
+			// primitive array
+			if (path.length == 1) {
+				for (let scopeEl of this.scopeElements) {
+					if (root == scopeEl.__scopeName) {
+						watch.dependency = scopeEl.__array;
+						watch._path = [scopeEl.__array.indexOf(scopeEl.__context).toString()];
+						this.watchlist.push(watch);
+						return watch;
+					}
+				}
+				console.error("scope error ?", path, this.scopeElements);
+			} else {
+				// didn't resolve the fullpath from scopes for the watch path thing
+				// but if the scope is stale this child element will be removed anyway
+				watch.dependency = this.#resolveFromScopes(path);
+				watch._path = originalPath;
+			}
 		}
 
-		this.watchlist.push({ dependency, path: originalPath });
-		return dependency;
+		this.watchlist.push(watch);
+		return watch;
+	}
+
+	getValueFrom(path) {
+		let _path = toPath(path);
+		if (_path[0] in this.model) {
+			return get(this.model, _path);
+		}
+		return get(this.getScopeValues(), _path);
 	}
 
 	getValue() {
 		let value;
-		if (this._path[this._path.length - 1].startsWith("$")) {
+		if (this._path.at(-1).startsWith("$")) {
 			value = get(this.getScopeValues(), this._path);
 		} else {
-			value = get(this.context, this._path[this._path.length - 1]);
+			value = get(this.context, this._path.at(-1));
 			if (this.modifier) {
-				value = this.modifier.read(value, ...this.modifierArgs);
+				value = this.modifier.read(this, value, ...this.#resolveModifierArgs());
 			}
 		}
 		this.cachedValue = value;
@@ -196,6 +283,6 @@ export default class Binding {
 	}
 
 	setValue(value) {
-		set(this.context, this._path[this._path.length - 1], value);
+		set(this.context, this._path.at(-1), value);
 	}
 }
