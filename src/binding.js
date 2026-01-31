@@ -199,6 +199,7 @@ export default class Binding {
 				return path.length ? get(scopeEl.__context, path) : scopeEl.__context;
 			}
 		}
+		return undefined;
 	}
 
 	watch(originalPath) {
@@ -234,8 +235,6 @@ export default class Binding {
 		if (root in this.model) {
 			watch.dependency = this.#resolveFromModel(path);
 			watch._path = originalPath;
-			this.watchlist.push(watch);
-			return watch;
 		} else {
 			// primitive array
 			if (path.length == 1) {
@@ -243,16 +242,32 @@ export default class Binding {
 					if (root == scopeEl.__scopeName) {
 						watch.dependency = scopeEl.__array;
 						watch._path = [scopeEl.__array.indexOf(scopeEl.__context).toString()];
-						this.watchlist.push(watch);
-						return watch;
+						break;
 					}
 				}
-				console.error("scope error ?", path, this.scopeElements);
+				if (!watch.dependency) {
+					console.warn(`could not find match for path ${originalPath.join(".")}`);
+				}
 			} else {
 				// didn't resolve the fullpath from scopes for the watch path thing
 				// but if the scope is stale this child element will be removed anyway
 				watch.dependency = this.#resolveFromScopes(path);
+				if (!watch.dependency) {
+					console.warn(`could not find match for path ${originalPath.join(".")}`);
+				}
 				watch._path = originalPath;
+			}
+		}
+
+		if (watch.dependency && watch._path) {
+			let desc = Object.getOwnPropertyDescriptor(watch.dependency, watch._path.at(-1));
+			if (desc.get && typeof desc.get == "function") {
+				let dependencies = watch.dependency[watch._path.at(-1) + "_dependencies"];
+				if (dependencies && Array.isArray(dependencies)) {
+					for (let dependency of dependencies) {
+						this.watch(dependency);
+					}
+				}
 			}
 		}
 
