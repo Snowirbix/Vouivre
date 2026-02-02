@@ -232,14 +232,14 @@ In this example we render a list of persons in a table with an input text to fil
 						<span class="flex">{ column }</span>
 						<button
 							class="sort-btn"
-							v-attr-disabled="isCurrentSort :call @sortColumn @column @sortOrder desc"
-							v-on-click="sort :args @column desc"
+							v-attr-disabled="isCurrentSort :call sortColumn column sortOrder desc"
+							v-on-click="sort :args column desc"
 						>
 							↓</button
 						><button
 							class="sort-btn"
-							v-attr-disabled="isCurrentSort :call @sortColumn @column @sortOrder asc"
-							v-on-click="sort :args @column asc"
+							v-attr-disabled="isCurrentSort :call sortColumn column sortOrder asc"
+							v-on-click="sort :args column asc"
 						>
 							↑
 						</button>
@@ -253,7 +253,7 @@ In this example we render a list of persons in a table with an input text to fil
 			<tr>
 				<th>{ $index }</th>
 				<template v-foreach-column="columns">
-					<td>{ person :get @column }</td>
+					<td>{ person :get column }</td>
 				</template>
 			</tr>
 		</template>
