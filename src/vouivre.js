@@ -1,36 +1,5 @@
 import { createModel } from "./model";
 
-// function setupHighlightRefresh() {
-// 	const sheet = new CSSStyleSheet();
-// 	for (let i = 0; i < 10; i++) {
-// 		let value = 25 + 25 * i;
-// 		sheet.insertRule(`.refresh-${i} { background-color: rgb(${value}, 25, 25); }`, 0);
-// 	}
-// 	document.adoptedStyleSheets.push(sheet);
-// }
-
-// export function highlightRefresh(element) {
-// 	const PREFIX = "refresh-";
-// 	const MAX = 9;
-// 	const DURATION = 2000;
-
-// 	const currentClass = [...element.classList].find((c) => c.startsWith(PREFIX));
-// 	let nextClass;
-
-// 	if (currentClass) {
-// 		const level = Math.min(parseInt(currentClass.replace(PREFIX, "")) + 1, MAX);
-// 		nextClass = `${PREFIX}${level}`;
-// 		element.classList.replace(currentClass, nextClass);
-// 	} else {
-// 		nextClass = `${PREFIX}0`;
-// 		element.classList.add(nextClass);
-// 	}
-
-// 	setTimeout(() => {
-// 		element.classList.contains(nextClass) && element.classList.remove(nextClass);
-// 	}, DURATION);
-// }
-
 var vouivre = {
 	directives: {},
 	defaultDirective: undefined,
@@ -57,14 +26,8 @@ var vouivre = {
 		}
 		vouivre.defaultDirective.bind(elements, model);
 		vouivre.interpolationDirective.bind(context, model);
-		// if (vouivre.debug) highlightRefresh(context);
 	},
 	bind(context, data, options = {}) {
-		// vouivre.debug = options.debug ?? false;
-		// if (options.debug) {
-		// 	setupHighlightRefresh();
-		// }
-
 		let model = createModel(data);
 		vouivre.bindNode(context, model);
 

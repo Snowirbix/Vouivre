@@ -1,6 +1,5 @@
 import Directive from "./directive";
 import Binding from "./binding";
-import vouivre, { highlightRefresh } from "./vouivre";
 
 class Interpolation {
 	constructor(element, text, bindings) {
@@ -73,8 +72,5 @@ export default class InterpolationDirective extends Directive {
 			var _binding = interp.bindings.find((b) => b.expression === $1);
 			return binding == _binding ? _binding.getValue() : _binding.cachedValue;
 		});
-		// if (vouivre.debug) {
-		// 	highlightRefresh(binding.element);
-		// }
 	}
 }

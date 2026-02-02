@@ -1,5 +1,5 @@
 import Binding from "./binding";
-import vouivre, { highlightRefresh } from "./vouivre";
+import vouivre from "./vouivre";
 
 export default class Directive {
 	name;
@@ -75,9 +75,6 @@ export default class Directive {
 	update(binding) {
 		if ("update" in this.callbacks) {
 			this.callbacks.update.call(binding, binding.element, binding.getValue());
-			// if (vouivre.debug) {
-			// 	highlightRefresh(binding.element);
-			// }
 		}
 	}
 }

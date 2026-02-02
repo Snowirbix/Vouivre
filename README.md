@@ -1,6 +1,6 @@
 # Vouivre
 
-Vouivre is a lightweight reactive library with easy templating syntax and powerful data binding to enhance your html views.
+Vouivre is a lightweight reactive library with easy templating syntax and powerful data binding to enhance your html views. Based on javascript Proxy and a syntax inspired by tinybind/rivets.
 
 ## Installation
 
@@ -11,6 +11,10 @@ npm install vouivre
 and import in your project using a bundler like webpack or vite
 ```javascript
 import vouivre from "vouivre"
+```
+Or you can grab the release on github and use it in a script tag directly.
+```html
+<script src="./vouivre.min.js"></script>
 ```
 
 ## Usage
@@ -36,7 +40,8 @@ vouivre.bind(document.body, {
 	}
 });
 ```
-Vouivre binds HTML elements to the model's property and observes modifications using a Proxy. When a property is modified in the model, only the corresponding bindings are updated, ensuring minimal DOM manipulations and maximum performance.
+Vouivre binds HTML elements to the model's property and observes modifications using a Proxy. When a property is modified in the model, only the corresponding bindings are updated, ensuring minimal DOM manipulations and maximum performance.  
+You can use multiple models bound to different parts of your HTML, in this example we use a single model bound to document.body.
 
 ### Listening to Events
 
@@ -60,7 +65,7 @@ const model = vouivre.bind(document.body, {
 
 ### Iterating with foreach
 
-The `foreach` directive is a special one, creating a scope for each iterated item. The name of the scope variable is the parameter of the directive just after `v-foreach-`. Children elements can access this bound variable as well as a special variable `$index`.
+The `foreach` directive is a special one, usable only on template elements. It creates a scope for each iterated item. The name of the scope variable is the parameter of the directive `v-foreach-*`. Children elements can access this bound variable as well as a special variable `$index`.
 
 ```html
 <ol>
@@ -91,11 +96,11 @@ const model = vouivre.bind(document.body, {
 	}
 });
 ```
-Event listener receive a scope object as a second argument, with all the scoped values and $index above the node.
+Event listeners receive a scope object as a second argument, with all the scoped variables, the index $index and the parent scope $parent.
 
 ### Binding inputs
 
-The `binding` directive allows you to create a bidirectional bind between the model value and an input element. This means that the model is updated when the user interacts with the form inputs, and the inputs are updated if the model is modified.
+The `binding` directive allows you to create a bidirectional bind between the model value and an input element. This means that the model is updated when the user interacts with the form inputs, and the inputs are updated when the model is modified.
 
 ```html
 <form>
@@ -130,22 +135,22 @@ vouivre.bind(document.body, {
 
 ## Modifiers
 
-Modifiers are used to alter the value of a binding. They can format the value as time or percentage, or add simple logic like inverting a value with `not` or comparing with `is`. Modifiers are applied after the property path delimited by `:`. First comes the modifier name, and then a list of parameters if needed.
+Modifiers are used to alter the value of a binding. They can format the value as time or percentage, or add simple logic like inverting a value with `not` or comparing with `is`. Modifiers are applied after the property path delimited by `:`. First comes the modifier name, and then a list of parameters if needed. You can also chain modifiers.
 
 ```html
 <div v-show="isPrivate : not">public</div>
 <div v-text="now :time"></div>
-<button v-disabled="status :is connected">Login</div>
+<button v-show="status :is connected :not">Login</div>
 ```
 
 ```js
 vouivre.bind(document.body, { isPrivate: true, now: Date.now(), status: "connected" });
 ```
 
-If a parameter of the modifier starts with an `@`, the parameter is treated as a property path that will automatically be resolved and put in the watch list as a dependency of the binding, so that it updates when the value changes.
+Parameters of the modifier can be model properties, scope variables or primitives (string, number etc.). Properties will automatically be resolved and put in the watch list as a dependency of the binding, so that it updates when the value changes.
 
 ```html
-<button v-on-click="sort :args @movieList name">public</div>
+<button v-on-click="sort :call name">public</div>
 ```
 
 ## Computed properties
@@ -165,7 +170,51 @@ vouivre.bind(document.body, {
 });
 ```
 
-You can tell the binding what are the dependencies of this computed property with an array with the same name as the getter + `_dependencies`. Or if you prefer you can use the `watch` modifier directly in the attribute to set the dependencies to watch.
+You can tell the binding what are the dependencies of this computed property with an array with the same name as the getter + `_dependencies`. Or if you prefer you can use the `watch` modifier directly in the attribute.
+
+## Custom directives
+
+To create new directive with your own logic use vouivre.directive before binding the model.
+
+```js
+vouivre.directive("color", {
+	bind(element, value) {
+		// called once before any update
+		// can be used to register event listeners
+	},
+	update(element, value) {
+		// called on every value change
+		element.style.color = value;
+	},
+});
+```
+Both hooks are optional.
+
+## Custom modifiers
+
+The setup hook is optional and called once.  
+In this example we demonstrate another feature, watching changes on all properties of an object by adding `*` to the path.
+
+```js
+vouivre.modifier("toString", {
+	setup(value) {
+		this.watch([...this._path, "*"]);
+	},
+	read(value) {
+		if (value instanceof Object) {
+			return Object.keys(value);
+		}
+		return value.toString();
+	},
+	write(value) {
+		return value;
+	}
+});
+vouivre.bind(document.body, { author: { firstName: "John", lastName: "Doe" } });
+```
+```html
+<pre v-text="author : toString"></pre>
+```
 
 ## Advanced example
 

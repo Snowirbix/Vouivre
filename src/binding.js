@@ -80,6 +80,11 @@ export default class Binding {
 		this._path = toPath(path);
 		this.type = this.getPathType(this._path);
 
+		if (this.type == "primitive") {
+			console.error(`could not find property for path ${path} on `, element);
+			return;
+		}
+
 		this.modifiers = modifiers;
 		for (let modifier of this.modifiers) {
 			modifier.watchArgs(this);
