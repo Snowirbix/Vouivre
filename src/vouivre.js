@@ -32,9 +32,9 @@ import { createModel } from "./model";
 // }
 
 var vouivre = {
-	services: {},
-	defaultService: undefined,
-	interpolationService: undefined,
+	directives: {},
+	defaultDirective: undefined,
+	interpolationDirective: undefined,
 	modifiers: {},
 	prefix: "v",
 	debug: false,
@@ -52,11 +52,11 @@ var vouivre = {
 	},
 	bindNode(context, model) {
 		let elements = vouivre.scan(context);
-		for (let service of vouivre.services) {
-			service.bind(elements, model);
+		for (let directive of vouivre.directives) {
+			directive.bind(elements, model);
 		}
-		vouivre.defaultService.bind(elements, model);
-		vouivre.interpolationService.bind(context, model);
+		vouivre.defaultDirective.bind(elements, model);
+		vouivre.interpolationDirective.bind(context, model);
 		// if (vouivre.debug) highlightRefresh(context);
 	},
 	bind(context, data, options = {}) {
@@ -71,15 +71,15 @@ var vouivre = {
 		return model;
 	},
 	unbindNode(context) {
-		for (let service of vouivre.services) {
-			service.unbind(context);
+		for (let directive of vouivre.directives) {
+			directive.unbind(context);
 		}
-		vouivre.defaultService.unbind(context);
-		vouivre.interpolationService.unbind(context);
+		vouivre.defaultDirective.unbind(context);
+		vouivre.interpolationDirective.unbind(context);
 	},
 	unbind(context) {
-		for (let service of vouivre.services) {
-			service.unbind(context);
+		for (let directive of vouivre.directives) {
+			directive.unbind(context);
 		}
 	},
 };

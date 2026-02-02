@@ -1,7 +1,7 @@
 import Binding from "./binding";
 import vouivre, { highlightRefresh } from "./vouivre";
 
-export default class Service {
+export default class Directive {
 	name;
 	callbacks;
 	bindings;

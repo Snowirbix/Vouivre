@@ -1,4 +1,4 @@
-import Service from "./service";
+import Directive from "./directive";
 import Binding from "./binding";
 import vouivre, { highlightRefresh } from "./vouivre";
 
@@ -9,7 +9,7 @@ class Interpolation {
 		this.bindings = bindings;
 	}
 }
-export default class InterpolationService extends Service {
+export default class InterpolationDirective extends Directive {
 	interpolations;
 	regex;
 

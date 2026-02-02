@@ -1,18 +1,18 @@
 import vouivre from "./vouivre";
-import services from "./services";
+import directives from "./directives";
 import modifiers from "./modifiers";
-import InterpolationService from "./interpolation";
-import Service from "./service";
-export { default as Service } from "./service";
+import InterpolationDirective from "./interpolation";
+import Directive from "./directive";
+export { default as Directive } from "./directive";
 export { default as Modifier } from "./modifier";
 
-vouivre.services = services;
-vouivre.defaultService = new Service("*", {
+vouivre.directives = directives;
+vouivre.defaultDirective = new Directive("*", {
 	update: function (el, value) {
 		el.setAttribute(this.args.join("-"), value);
 	},
 });
-vouivre.interpolationService = new InterpolationService();
+vouivre.interpolationDirective = new InterpolationDirective();
 vouivre.modifiers = modifiers;
 
 export default vouivre;

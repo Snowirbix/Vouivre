@@ -54,7 +54,7 @@ class BindingModifier {
 
 export default class Binding {
 	element;
-	service;
+	directive;
 	expression;
 	args;
 	fnArgs = [];
@@ -67,9 +67,9 @@ export default class Binding {
 	model;
 	watchlist = [];
 
-	constructor(element, service, expression, args, model) {
+	constructor(element, directive, expression, args, model) {
 		this.element = element;
-		this.service = service;
+		this.directive = directive;
 		this.expression = expression;
 		this.args = args;
 		this.model = model;
@@ -128,7 +128,7 @@ export default class Binding {
 			}
 		}
 
-		if (accepted) this.service.update(this);
+		if (accepted) this.directive.update(this);
 	}
 
 	#processBindingExpression(expr) {

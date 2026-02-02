@@ -1,10 +1,10 @@
 import set from "lodash/set";
-import Service from "./service";
+import Directive from "./directive";
 import vouivre from "./vouivre";
 
 var services = [];
 services.push(
-	new Service("foreach-*", {
+	new Directive("foreach-*", {
 		bind(templateEl, items) {
 			// if moveBefore is available use it, fallback to insertBefore
 			this.moveBeforeAvailable = typeof templateEl.moveBefore === "function";
@@ -65,14 +65,14 @@ services.push(
 );
 
 services.push(
-	new Service("value", {
+	new Directive("value", {
 		update: function (el, value) {
 			el.value = value;
 		},
 	}),
 );
 services.push(
-	new Service("bind", {
+	new Directive("bind", {
 		bind: function (el, v) {
 			this.watch([...this._path, "*"]);
 
@@ -137,21 +137,21 @@ services.push(
 	}),
 );
 services.push(
-	new Service("text", {
+	new Directive("text", {
 		update: function (el, value) {
 			el.innerText = value;
 		},
 	}),
 );
 services.push(
-	new Service("show", {
+	new Directive("show", {
 		update: function (el, value) {
 			el.style.display = value ? "" : "none";
 		},
 	}),
 );
 services.push(
-	new Service("enabled", {
+	new Directive("enabled", {
 		update: function (el, value) {
 			el.disabled = !value;
 		},
@@ -159,14 +159,14 @@ services.push(
 );
 
 services.push(
-	new Service("on-*", {
+	new Directive("on-*", {
 		bind: function (el, value) {
 			el.addEventListener(this.args[0], (e) => value(e, this.getScopeValues(), ...this.fnArgs));
 		},
 	}),
 );
 services.push(
-	new Service("class-*", {
+	new Directive("class-*", {
 		update: function (el, value) {
 			el.classList.toggle(this.args.join("-"), value);
 		},
@@ -174,7 +174,7 @@ services.push(
 );
 
 services.push(
-	new Service("if", {
+	new Directive("if", {
 		update(el, value) {
 			if (value && !this.instance) {
 				let instance = el.content.cloneNode(true).firstElementChild;
@@ -191,14 +191,14 @@ services.push(
 );
 
 services.push(
-	new Service("attr-*", {
+	new Directive("attr-*", {
 		update: function (el, value) {
 			el.toggleAttribute(this.args.join("-"), value);
 		},
 	}),
 );
 services.push(
-	new Service("prop-*", {
+	new Directive("prop-*", {
 		update: function (el, value) {
 			set(el, this.args, value);
 		},
