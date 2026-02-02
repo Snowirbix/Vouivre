@@ -1,6 +1,6 @@
 import debounce from "lodash/debounce";
 
-function proxify(obj, proxy, lookup) {
+function proxify(obj, proxy, lookup, proxies) {
 	var p = new Proxy(obj, proxy);
 
 	for (let key in obj) {
@@ -8,8 +8,10 @@ function proxify(obj, proxy, lookup) {
 			continue;
 		}
 		if (obj[key] instanceof Object && typeof obj[key] !== "function" && obj[key].__isProxy == undefined) {
-			obj[key] = proxify(obj[key], proxy, lookup);
+			const target = obj[key];
+			obj[key] = proxify(obj[key], proxy, lookup, proxies);
 			lookup.set(obj[key], p);
+			proxies.set(target, obj[key]);
 		}
 	}
 
@@ -35,10 +37,6 @@ function getDebounced(target) {
 	return debouncers.get(target);
 }
 
-function getKeyByValue(object, value) {
-	return Object.keys(object).find((key) => object[key] === value);
-}
-
 function requestUpdate(event, target, key) {
 	event.dispatchEvent(
 		new CustomEvent("requestUpdate", {
@@ -47,16 +45,23 @@ function requestUpdate(event, target, key) {
 	);
 }
 
+function getKeyByValue(object, value) {
+	return Object.keys(object).find((key) => object[key] === value);
+}
+
 const setAndMapReactiveFunctions = ["add", "clear", "delete", "set", "getOrInsert", "getOrInsertComputed"];
 
 export function createModel(data) {
-	let lookup = new Map(); // obj ref => parent obj ref
 	let event = new EventTarget();
+	let lookup = new WeakMap(); // proxy ref => parent proxy ref
+	let proxies = new WeakMap(); // obj ref => proxy ref because https://github.com/tc39/ecma262/issues/1198
 
 	var proxy = {
 		get(target, key, receiver) {
 			if (key == "__isProxy") return true;
 			if (key == "__target") return target;
+			if (key == "__event") return event;
+			if (key == "__lookup") return lookup;
 
 			// reactify Set and Map
 			if (target instanceof Set || target instanceof Map) {
@@ -77,8 +82,9 @@ export function createModel(data) {
 		},
 		set(target, key, value, receiver) {
 			if (value instanceof Object && typeof value !== "function" && value.__isProxy == undefined) {
-				target[key] = proxify(value, proxy, lookup);
+				target[key] = proxify(value, proxy, lookup, proxies);
 				lookup.set(target[key], receiver);
+				proxies.set(value, target[key]);
 			} else {
 				Reflect.set(...arguments);
 			}
@@ -94,9 +100,7 @@ export function createModel(data) {
 		deleteProperty(target, key) {
 			if (key in target) {
 				Reflect.deleteProperty(...arguments);
-				// no receiver in deleteProperty https://github.com/tc39/ecma262/issues/1198
-				let receiver;
-				for (let [proxy, parent] of lookup) if (proxy.__target == target) receiver = proxy;
+				let receiver = proxies.get(target);
 				requestUpdate(event, receiver, key);
 				return true;
 			}
@@ -104,9 +108,5 @@ export function createModel(data) {
 		},
 	};
 
-	return {
-		model: proxify(data, proxy, lookup),
-		event,
-		lookup,
-	};
+	return proxify(data, proxy, lookup, proxies);
 }

@@ -50,13 +50,13 @@ var vouivre = {
 		}
 		return elements;
 	},
-	bindNode(context, model, event, lookup) {
+	bindNode(context, model) {
 		let elements = vouivre.scan(context);
 		for (let service of vouivre.services) {
-			service.bind(elements, model, event, lookup);
+			service.bind(elements, model);
 		}
-		vouivre.defaultService.bind(elements, model, event, lookup);
-		vouivre.interpolationService.bind(context, model, event, lookup);
+		vouivre.defaultService.bind(elements, model);
+		vouivre.interpolationService.bind(context, model);
 		// if (vouivre.debug) highlightRefresh(context);
 	},
 	bind(context, data, options = {}) {
@@ -65,8 +65,8 @@ var vouivre = {
 		// 	setupHighlightRefresh();
 		// }
 
-		let { model, event, lookup } = createModel(data);
-		vouivre.bindNode(context, model, event, lookup);
+		let model = createModel(data);
+		vouivre.bindNode(context, model);
 
 		return model;
 	},

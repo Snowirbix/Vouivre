@@ -18,8 +18,8 @@ export default class Service {
 		}
 	}
 
-	bind(elements, model, event, lookup) {
-		let bindings = this.createBindings(elements, model, event, lookup);
+	bind(elements, model) {
+		let bindings = this.createBindings(elements, model);
 
 		for (let binding of bindings) {
 			if ("bind" in this.callbacks) {
@@ -42,10 +42,10 @@ export default class Service {
 		}
 	}
 
-	createBindings(elements, model, event, lookup) {
+	createBindings(elements, model) {
 		let newBindings = [];
 		for (let element of elements) {
-			let attributes = [...element.attributes]; // copy the array because sometimes services can add/remove attributes inbetween and cause issues
+			let attributes = [...element.attributes]; // copy the array because sometimes services can add/remove attributes inbetween
 			for (let attr of attributes) {
 				if (attr.name == `${vouivre.prefix}-scope`) continue;
 				let attrName = attr.name.split("-");
@@ -63,8 +63,6 @@ export default class Service {
 					attr.value,
 					attrName, // remaining args
 					model,
-					event,
-					lookup,
 				);
 				element.removeAttribute(attr.name);
 				this.bindings.push(binding);

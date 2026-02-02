@@ -43,7 +43,7 @@ services.push(
 					instance = this.createInstance(this.args[0], items, item);
 					templateEl.parentElement.insertBefore(instance, next);
 					instances.set(item, instance);
-					vouivre.bindNode(instance, this.model, this.event, this.lookup);
+					vouivre.bindNode(instance, this.model);
 				} else if (next && instance.nextSibling != next) {
 					if (this.moveBeforeAvailable) {
 						templateEl.parentElement.moveBefore(instance, next);
@@ -180,7 +180,7 @@ services.push(
 				let instance = el.content.cloneNode(true).firstElementChild;
 				el.insertAdjacentElement("beforebegin", instance);
 				this.instance = instance;
-				vouivre.bindNode(instance, this.model, this.event, this.lookup);
+				vouivre.bindNode(instance, this.model);
 			} else if (!value && this.instance) {
 				this.instance.remove();
 				vouivre.unbindNode(this.instance);

@@ -16,6 +16,42 @@ Element.prototype.parents = function (selector) {
 	return parents;
 };
 
+class BindingModifier {
+	binding;
+	modifier;
+	args;
+	watchlist;
+
+	constructor(binding, modifierName, args) {
+		this.binding = binding;
+		this.modifier = vouivre.modifiers.find((mod) => mod.name == modifierName);
+		this.args = args.map((arg) => ({
+			path: arg,
+			type: binding.getPathType(arg),
+		}));
+	}
+
+	watchArgs() {
+		this.args.filter((arg) => arg.type != "primitive").forEach((arg) => this.binding.watch(arg.path));
+	}
+
+	#resolveArgs() {
+		return this.args.map((arg) => this.binding.getPathValue(arg.type, arg.path));
+	}
+
+	setup() {
+		this.modifier.setup(this.binding, ...this.#resolveArgs());
+	}
+
+	read(value) {
+		return this.modifier.read(this.binding, value, ...this.#resolveArgs());
+	}
+
+	write(value) {
+		return this.modifier.write(this.binding, value, ...this.#resolveArgs());
+	}
+}
+
 export default class Binding {
 	element;
 	service;
@@ -27,38 +63,36 @@ export default class Binding {
 	_path;
 	cachedValue;
 
-	modifier;
-	modifierArgs;
+	modifiers;
 	model;
 	watchlist = [];
 
-	constructor(element, service, expression, args, model, event, lookup) {
+	constructor(element, service, expression, args, model) {
 		this.element = element;
 		this.service = service;
 		this.expression = expression;
 		this.args = args;
 		this.model = model;
-		this.event = event;
-		this.lookup = lookup;
 
-		let { path, modifierName, modifierArgs } = this.#processBindingExpression(expression);
+		this.#getScopeElements();
+		let { path, modifiers } = this.#processBindingExpression(expression);
 		this.path = path;
 		this._path = toPath(path);
-		this.#getScopeElements();
+		this.type = this.getPathType(this._path);
 
-		this.modifier = vouivre.modifiers.find(({ name }) => name === modifierName);
-		this.modifierArgs = modifierArgs;
-		if (this.modifier) {
-			this.#watchModifierArgs();
-			this.modifier.setup(this, ...this.#resolveModifierArgs());
+		this.modifiers = modifiers;
+		for (let modifier of this.modifiers) {
+			modifier.watchArgs(this);
+			modifier.setup(this);
 		}
 
-		let { dependency, _path } = this.watch(this._path);
+		const [dependency, prop] = this.getPathDependency(this.type, this._path);
 		this.context = dependency;
-		this._path = _path;
+		this.prop = prop;
+		this.watch(this._path);
 
 		this.listener = this.#handleUpdate.bind(this);
-		event.addEventListener("requestUpdate", this.listener);
+		this.model.__event.addEventListener("requestUpdate", this.listener);
 
 		if (!this.element.__bindings) {
 			this.element.__bindings = [];
@@ -67,7 +101,7 @@ export default class Binding {
 	}
 
 	unbind() {
-		this.event.removeEventListener("requestUpdate", this.listener);
+		this.model.__event.removeEventListener("requestUpdate", this.listener);
 		this.watchlist.length = 0;
 	}
 
@@ -77,7 +111,7 @@ export default class Binding {
 		let accepted = false;
 
 		for (const watch of this.watchlist) {
-			const result = this.#isWatchAffected(watch, target, key, this.lookup);
+			const result = this.#isWatchAffected(watch, target, key);
 
 			if (!result.affected) continue;
 
@@ -90,8 +124,7 @@ export default class Binding {
 		if (staleWatches.size > 0) {
 			this.watchlist = this.watchlist.filter((w) => !staleWatches.has(w));
 			for (const watch of staleWatches) {
-				const _path = watch.wildcard ? [...watch._path, "*"] : watch._path;
-				this.watch(_path);
+				this.watch(watch._path);
 			}
 		}
 
@@ -99,32 +132,29 @@ export default class Binding {
 	}
 
 	#processBindingExpression(expr) {
-		if (expr.includes(":")) {
-			let [path, modifierExpr] = expr.split(":");
-			path = path.trim();
-			modifierExpr = modifierExpr.trim();
-			let [modifierName, ...modifierArgs] = modifierExpr.split(/\s/);
-			return { path, modifierName, modifierArgs };
-		} else {
-			return { path: expr.trim() };
-		}
+		let [path, ...modifierExprs] = expr.split(":");
+		path = path.trim();
+		const modifiers = modifierExprs.map((expr) => {
+			let [modifierName, ...modifierArgs] = expr.trim().split(/\s+/);
+			return new BindingModifier(this, modifierName, modifierArgs);
+		});
+		return { path, modifiers };
 	}
 
-	#isWatchAffected(watch, target, key, parentLookup) {
-		if (watch.dependency === target && watch._path.at(-1) === key) {
+	#isWatchAffected(watch, target, key) {
+		if (watch.dependency === target && watch.prop === key) {
 			return { affected: true, stale: false };
 		}
 
 		// check parent object change
 		let node = watch.dependency;
-		let pathIndex = watch._path.length - 2;
-
-		while ((node = parentLookup.get(node))) {
+		let parent = this.model.__lookup.get(node);
+		while ((parent = this.model.__lookup.get(node))) {
 			// trigger only when object ref changes
-			if (node === target && watch._path[pathIndex] === key) {
+			if (parent === target && node === target[key]) {
 				return { affected: true, stale: true };
 			}
-			pathIndex--;
+			node = parent;
 		}
 
 		if (watch.wildcard) {
@@ -134,7 +164,7 @@ export default class Binding {
 				if (node == watch.dependency) {
 					return { affected: true, stale: false };
 				}
-			} while ((node = parentLookup.get(node)));
+			} while ((node = this.model.__lookup.get(node)));
 		}
 
 		return { affected: false };
@@ -142,29 +172,6 @@ export default class Binding {
 
 	#getScopeElements() {
 		this.scopeElements = this.element.parents(`*[${vouivre.prefix}-scope]`);
-	}
-
-	#watchModifierArgs() {
-		for (let arg of this.modifierArgs) {
-			if (arg.startsWith("$")) {
-				this.watch(arg);
-			}
-			if (arg.startsWith("@")) {
-				this.watch(arg.substring(1));
-			}
-		}
-	}
-
-	#resolveModifierArgs() {
-		return this.modifierArgs.map((arg) => {
-			if (arg.startsWith("$")) {
-				return this.getValueFrom(arg);
-			}
-			if (arg.startsWith("@")) {
-				return this.getValueFrom(arg.substring(1));
-			}
-			return arg;
-		});
 	}
 
 	getScopeValues() {
@@ -186,118 +193,109 @@ export default class Binding {
 		return this.#setParentDeep(i, obj.$parent);
 	}
 
-	#resolveFromModel(path) {
-		path.pop();
-		return path.length ? get(this.model, path) : this.model;
+	getPathType(path) {
+		const _path = toPath(path);
+		if (_path.at(-1) == "$index") {
+			_path.pop();
+			console.assert(_path.every((p) => p == "$parent"));
+			return "$index";
+		}
+		if (_path[0] in this.model) {
+			return "model";
+		}
+		if (this.scopeElements.some((scopeEl) => scopeEl.__scopeName == _path[0])) {
+			return "scope";
+		}
+		return "primitive";
 	}
 
-	#resolveFromScopes(path) {
-		path.pop(); // pop the property name, we only want the dependency object ref
-		for (let scopeEl of this.scopeElements) {
-			if (path[0] == scopeEl.__scopeName) {
-				path.shift(); // shift the scope name
-				return path.length ? get(scopeEl.__context, path) : scopeEl.__context;
+	getPathValue(type, path) {
+		const _path = toPath(path);
+		switch (type) {
+			case "$index": {
+				// all array elements but the last one are $parent
+				const el = this.scopeElements[_path.length - 1];
+				return el.__array.findIndex((v) => v == el.__context);
 			}
+			case "model":
+				return get(this.model, _path);
+			case "scope": {
+				const name = _path.shift();
+				const el = this.scopeElements.find((s) => s.__scopeName == name);
+				return _path.length > 0 ? get(el.__context, _path) : el.__context;
+			}
+			case "primitive":
+			default:
+				return path;
 		}
-		return undefined;
 	}
 
-	watch(originalPath) {
-		if (!(originalPath instanceof Array)) {
-			originalPath = toPath(originalPath);
-		} else {
-			originalPath = [...originalPath];
+	getPathDependency(type, path) {
+		const _path = toPath(path);
+		switch (type) {
+			case "$index": {
+				const el = this.scopeElements[_path.length - 1];
+				return [el.__array, "length"];
+			}
+			case "model": {
+				const prop = _path.pop();
+				const dep = _path.length > 0 ? get(this.model, _path) : this.model;
+				return [dep, prop];
+			}
+			case "scope": {
+				const name = _path.shift();
+				const el = this.scopeElements.find((s) => s.__scopeName == name);
+				if (_path.length == 0) {
+					// primitive array
+					return [el.__array, el.__array.indexOf(el.__context).toString()];
+				}
+				const prop = _path.pop();
+				const dep = _path.length > 0 ? get(el.__context, _path) : el.__context;
+				return [dep, prop];
+			}
+			case "primitive":
+			default:
+				return null;
 		}
-		const watch = {};
+	}
 
-		if (originalPath.at(-1) == "*") {
+	watch(path) {
+		const _path = toPath(path);
+		const watch = {
+			_path,
+		};
+		if (_path.at(-1) == "*") {
 			watch.wildcard = true;
-			originalPath.pop();
+			_path.pop();
 		}
 
-		const path = [...originalPath];
-		const root = path[0];
+		const type = this.getPathType(_path);
+		const [dependency, prop] = this.getPathDependency(type, _path);
+		watch.dependency = dependency;
+		watch.prop = prop;
 
-		if (root.startsWith("$")) {
-			let depth = 0;
-			while (path[0] == "$parent") {
-				depth++;
-				path.shift();
-			}
-			if (path[0] == "$index") {
-				let scopeEl = this.scopeElements[depth];
-				watch.dependency = scopeEl.__array;
-				watch._path = [...originalPath, "length"];
-				this.watchlist.push(watch);
-				return { dependency: undefined, _path: originalPath };
-			}
-		}
-		if (root in this.model) {
-			watch.dependency = this.#resolveFromModel(path);
-			watch._path = originalPath;
-		} else {
-			// primitive array
-			if (path.length == 1) {
-				for (let scopeEl of this.scopeElements) {
-					if (root == scopeEl.__scopeName) {
-						watch.dependency = scopeEl.__array;
-						watch._path = [scopeEl.__array.indexOf(scopeEl.__context).toString()];
-						break;
-					}
-				}
-				if (!watch.dependency) {
-					console.warn(`could not find match for path ${originalPath.join(".")}`);
-				}
-			} else {
-				// didn't resolve the fullpath from scopes for the watch path thing
-				// but if the scope is stale this child element will be removed anyway
-				watch.dependency = this.#resolveFromScopes(path);
-				if (!watch.dependency) {
-					console.warn(`could not find match for path ${originalPath.join(".")}`);
-				}
-				watch._path = originalPath;
-			}
-		}
-
-		if (watch.dependency && watch._path) {
-			let desc = Object.getOwnPropertyDescriptor(watch.dependency, watch._path.at(-1));
-			if (desc.get && typeof desc.get == "function") {
-				let dependencies = watch.dependency[watch._path.at(-1) + "_dependencies"];
-				if (dependencies && Array.isArray(dependencies)) {
-					for (let dependency of dependencies) {
-						this.watch(dependency);
-					}
+		if (type == "model") {
+			let desc = Object.getOwnPropertyDescriptor(dependency, prop);
+			if (desc && desc.get && typeof desc.get == "function") {
+				watch.computedProp = true;
+				let dependencies = watch.dependency[prop + "_dependencies"] ?? [];
+				for (let dep of dependencies) {
+					this.watch(dep);
 				}
 			}
 		}
 
 		this.watchlist.push(watch);
-		return watch;
-	}
-
-	getValueFrom(path) {
-		let _path = toPath(path);
-		if (_path[0] in this.model) {
-			return get(this.model, _path);
-		}
-		return get(this.getScopeValues(), _path);
 	}
 
 	getValue() {
-		let value;
-		if (this._path.at(-1).startsWith("$")) {
-			value = get(this.getScopeValues(), this._path);
-		} else {
-			value = get(this.context, this._path.at(-1));
-			if (this.modifier) {
-				value = this.modifier.read(this, value, ...this.#resolveModifierArgs());
-			}
-		}
+		let value = this.getPathValue(this.type, this._path);
+		value = this.modifiers.reduce((acc, modifier) => modifier.read(acc), value);
 		this.cachedValue = value;
 		return value;
 	}
 
 	setValue(value) {
-		set(this.context, this._path.at(-1), value);
+		set(this.context, this.prop, value);
 	}
 }

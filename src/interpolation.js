@@ -20,7 +20,7 @@ export default class InterpolationService extends Service {
 		this.regex = /\{(.+?)\}/g;
 	}
 
-	bind(context, model, event, lookup) {
+	bind(context, model) {
 		const result = document.evaluate(this.xpath, context, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
 
 		let elements = [];
@@ -28,7 +28,7 @@ export default class InterpolationService extends Service {
 			elements.push(result.snapshotItem(i));
 		}
 
-		let interpolations = this.createBindings(elements, model, event, lookup);
+		let interpolations = this.createBindings(elements, model);
 
 		for (let interp of interpolations) {
 			for (let binding of interp.bindings) {
@@ -51,13 +51,13 @@ export default class InterpolationService extends Service {
 		}
 	}
 
-	createBindings(elements, model, event, lookup) {
+	createBindings(elements, model) {
 		for (let element of elements) {
 			var text = element.textContent;
 			let result;
 			let bindings = [];
 			while ((result = this.regex.exec(text))) {
-				let binding = new Binding(element, this, result[1], [], model, event, lookup);
+				let binding = new Binding(element, this, result[1], [], model);
 				bindings.push(binding);
 			}
 			if (bindings.length > 0) {
