@@ -1,6 +1,7 @@
 import get from "lodash/get";
 import set from "lodash/set";
 import toPath from "lodash/toPath";
+import Modifier from "./modifier";
 import vouivre from "./vouivre";
 
 Element.prototype.parents = function (selector) {
@@ -16,63 +17,30 @@ Element.prototype.parents = function (selector) {
 	return parents;
 };
 
-class BindingModifier {
-	binding;
-	modifier;
-	args;
-	watchlist;
-
-	constructor(binding, modifierName, args) {
-		this.binding = binding;
-		this.modifier = vouivre.modifiers.find((mod) => mod.name == modifierName);
-		this.args = args.map((arg) => ({
-			path: arg,
-			type: binding.getPathType(arg),
-		}));
-	}
-
-	watchArgs() {
-		this.args.filter((arg) => arg.type != "primitive").forEach((arg) => this.binding.watch(arg.path));
-	}
-
-	#resolveArgs() {
-		return this.args.map((arg) => this.binding.getPathValue(arg.type, arg.path));
-	}
-
-	setup() {
-		this.modifier.setup(this.binding, ...this.#resolveArgs());
-	}
-
-	read(value) {
-		return this.modifier.read(this.binding, value, ...this.#resolveArgs());
-	}
-
-	write(value) {
-		return this.modifier.write(this.binding, value, ...this.#resolveArgs());
-	}
-}
-
 export default class Binding {
 	element;
-	directive;
 	expression;
-	args;
 	fnArgs = [];
 	path;
 	// _path (for 'lodash path') is an array of properties
 	_path;
 	cachedValue;
-
+	events;
 	modifiers;
 	model;
 	watchlist = [];
+	listener;
 
-	constructor(element, directive, expression, args, model) {
+	constructor(element, expression, model, hooks, args) {
 		this.element = element;
-		this.directive = directive;
 		this.expression = expression;
-		this.args = args;
 		this.model = model;
+		this.events = new EventTarget();
+
+		const { extra, bind, unbind, update } = hooks;
+		this.hooks = { bind, unbind, update };
+		this.extra = extra;
+		this.args = args;
 
 		this.#getScopeElements();
 		let { path, modifiers } = this.#processBindingExpression(expression);
@@ -80,24 +48,21 @@ export default class Binding {
 		this._path = toPath(path);
 		this.type = this.getPathType(this._path);
 
-		if (this.type == "primitive") {
-			console.error(`could not find property for path ${path} on `, element);
-			return;
-		}
-
 		this.modifiers = modifiers;
 		for (let modifier of this.modifiers) {
 			modifier.watchArgs(this);
-			modifier.setup(this);
+			modifier.bind(this);
 		}
 
-		const [dependency, prop] = this.getPathDependency(this.type, this._path);
-		this.context = dependency;
-		this.prop = prop;
-		this.watch(this._path);
+		if (this.type != "primitive") {
+			const [dependency, prop] = this.getPathDependency(this.type, this._path);
+			this.context = dependency;
+			this.prop = prop;
+			this.watch(this._path);
+		}
 
 		this.listener = this.#handleUpdate.bind(this);
-		this.model.__event.addEventListener("requestUpdate", this.listener);
+		this.model.__events.addEventListener("requestUpdate", this.listener);
 
 		if (!this.element.__bindings) {
 			this.element.__bindings = [];
@@ -105,9 +70,25 @@ export default class Binding {
 		this.element.__bindings.push(this);
 	}
 
+	bind() {
+		if (this.hooks.bind) {
+			this.hooks.bind.call(this, this.element, this.getValue());
+		}
+	}
+
 	unbind() {
-		this.model.__event.removeEventListener("requestUpdate", this.listener);
+		if (this.hooks.unbind) {
+			this.hooks.unbind.call(this, this.element, this.getValue());
+		}
+		this.model.__events.removeEventListener("requestUpdate", this.listener);
 		this.watchlist.length = 0;
+	}
+
+	update() {
+		if (this.hooks.update) {
+			this.hooks.update.call(this, this.element, this.getValue());
+		}
+		this.events.dispatchEvent(new CustomEvent("update"));
 	}
 
 	#handleUpdate(event) {
@@ -133,7 +114,9 @@ export default class Binding {
 			}
 		}
 
-		if (accepted) this.directive.update(this);
+		if (accepted) {
+			this.update();
+		}
 	}
 
 	#processBindingExpression(expr) {
@@ -141,7 +124,8 @@ export default class Binding {
 		path = path.trim();
 		const modifiers = modifierExprs.map((expr) => {
 			let [modifierName, ...modifierArgs] = expr.trim().split(/\s+/);
-			return new BindingModifier(this, modifierName, modifierArgs);
+			console.assert(modifierName in vouivre.modifiers, `found no modifiers called ${modifierName}`);
+			return new Modifier(modifierName, modifierArgs, this);
 		});
 		return { path, modifiers };
 	}
@@ -301,6 +285,7 @@ export default class Binding {
 	}
 
 	setValue(value) {
+		value = this.modifiers.reduce((acc, modifier) => modifier.write(acc), value);
 		set(this.context, this.prop, value);
 	}
 }

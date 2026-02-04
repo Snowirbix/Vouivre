@@ -1,61 +1,50 @@
-import Modifier from "./modifier";
-
-var modifiers = [];
-modifiers.push(
-	new Modifier("watch", {
-		setup(...paths) {
+var modifiers = {
+	watch: {
+		bind(...paths) {
 			for (let path of paths) {
-				this.watch(path);
+				this.binding.watch(path);
 			}
 		},
 		read(value) {
 			return value;
 		},
-	}),
-);
-
-modifiers.push(
-	new Modifier("get", {
-		setup(prop) {
-			this._path.push(prop);
+	},
+	get: {
+		bind(prop) {
+			this.binding._path.push(prop);
 		},
 		read(value) {
 			return value;
 		},
-	}),
-);
-
-modifiers.push(
-	new Modifier("args", {
+	},
+	args: {
 		read(value, ...args) {
-			this.fnArgs = args;
+			this.binding.fnArgs = args;
 			return value;
 		},
-	}),
-);
-modifiers.push(
-	new Modifier("call", {
+	},
+	call: {
 		read(value, ...args) {
-			this.fnArgs = args;
+			this.binding.fnArgs = args;
 			return value(...this.fnArgs);
 		},
-	}),
-);
-
-modifiers.push(
-	new Modifier("not", {
+	},
+	not: {
 		read(value) {
 			return !value;
 		},
-	}),
-);
-
-modifiers.push(
-	new Modifier("is", {
+		write(value) {
+			return !value;
+		},
+	},
+	is: {
 		read(a, b) {
 			return a == b;
 		},
-	}),
-);
+		write(a, b) {
+			return a == b;
+		},
+	},
+};
 
 export default modifiers;

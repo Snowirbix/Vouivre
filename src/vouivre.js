@@ -1,9 +1,10 @@
 import { createModel } from "./model";
 
 var vouivre = {
+	bindDirectives: undefined,
+	unbindDirectives: undefined,
 	directives: {},
-	defaultDirective: undefined,
-	interpolationDirective: undefined,
+	interpolation: undefined,
 	modifiers: {},
 	prefix: "v",
 	debug: false,
@@ -21,11 +22,8 @@ var vouivre = {
 	},
 	bindNode(context, model) {
 		let elements = vouivre.scan(context);
-		for (let directive of vouivre.directives) {
-			directive.bind(elements, model);
-		}
-		vouivre.defaultDirective.bind(elements, model);
-		vouivre.interpolationDirective.bind(context, model);
+		vouivre.bindDirectives(elements, model);
+		vouivre.interpolation.bind(context, model);
 	},
 	bind(context, data, options = {}) {
 		let model = createModel(data);
@@ -34,16 +32,11 @@ var vouivre = {
 		return model;
 	},
 	unbindNode(context) {
-		for (let directive of vouivre.directives) {
-			directive.unbind(context);
-		}
-		vouivre.defaultDirective.unbind(context);
-		vouivre.interpolationDirective.unbind(context);
+		vouivre.unbindDirectives(context);
+		vouivre.interpolation.unbind(context);
 	},
 	unbind(context) {
-		for (let directive of vouivre.directives) {
-			directive.unbind(context);
-		}
+		vouivre.unbindNode(context);
 	},
 };
 export default vouivre;

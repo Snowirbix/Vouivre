@@ -1,19 +1,19 @@
-import Directive from "./directive";
 import Binding from "./binding";
 
-class Interpolation {
+class Entry {
 	constructor(element, text, bindings) {
 		this.element = element;
 		this.text = text;
 		this.bindings = bindings;
 	}
 }
-export default class InterpolationDirective extends Directive {
+export default class Interpolation {
 	interpolations;
+	xpath;
 	regex;
+	listener;
 
 	constructor() {
-		super("interpolation");
 		this.interpolations = new Map();
 		this.xpath = ".//descendant-or-self::*[not(self::script or self::style)][contains(text(), '{')]";
 		this.regex = /\{(.+?)\}/g;
@@ -56,11 +56,12 @@ export default class InterpolationDirective extends Directive {
 			let result;
 			let bindings = [];
 			while ((result = this.regex.exec(text))) {
-				let binding = new Binding(element, this, result[1], [], model);
+				let binding = new Binding(element, result[1], model, {}, []);
+				binding.events.addEventListener("update", () => this.update(binding));
 				bindings.push(binding);
 			}
 			if (bindings.length > 0) {
-				this.interpolations.set(element, new Interpolation(element, text, bindings));
+				this.interpolations.set(element, new Entry(element, text, bindings));
 			}
 		}
 		return elements.map((e) => this.interpolations.get(e));

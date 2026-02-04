@@ -1,24 +1,24 @@
 import set from "lodash/set";
-import Directive from "./directive";
 import vouivre from "./vouivre";
 
-var services = [];
-services.push(
-	new Directive("foreach-*", {
-		bind(templateEl, items) {
-			// if moveBefore is available use it, fallback to insertBefore
-			this.moveBeforeAvailable = typeof templateEl.moveBefore === "function";
-			this.instances = new Map();
-			this.watch([...this._path, "length"]);
-
-			this.createInstance = (scopeName, array, context) => {
+var directives = {
+	"foreach-*": {
+		priority: 100,
+		extra: {
+			createInstance(templateEl, scopeName, array, context) {
 				const instance = templateEl.content.cloneNode(true).firstElementChild;
 				instance.setAttribute(`${vouivre.prefix}-scope`, "");
 				instance.__scopeName = scopeName;
 				instance.__array = array;
 				instance.__context = context;
 				return instance;
-			};
+			},
+		},
+		bind(templateEl, items) {
+			// if moveBefore is available use it, fallback to insertBefore
+			this.moveBeforeAvailable = typeof templateEl.moveBefore === "function";
+			this.instances = new Map();
+			this.watch([...this._path, "length"]);
 		},
 		update(templateEl, items) {
 			var instances = this.instances;
@@ -40,7 +40,7 @@ services.push(
 				var instance = instances.get(item);
 
 				if (!instance) {
-					instance = this.createInstance(this.args[0], items, item);
+					instance = this.extra.createInstance(templateEl, this.args[0], items, item);
 					templateEl.parentElement.insertBefore(instance, next);
 					instances.set(item, instance);
 					vouivre.bindNode(instance, this.model);
@@ -61,44 +61,41 @@ services.push(
 				}
 			});
 		},
-	}),
-);
-
-services.push(
-	new Directive("value", {
+	},
+	value: {
+		priority: 50,
 		update: function (el, value) {
 			el.value = value;
 		},
-	}),
-);
-services.push(
-	new Directive("bind", {
-		bind: function (el, v) {
-			this.watch([...this._path, "*"]);
-
-			function getControlType(el) {
+	},
+	bind: {
+		priority: 45,
+		extra: {
+			getControlType(el) {
 				if (el.tagName === "SELECT") return "select";
 				if (el.tagName === "INPUT") {
 					if (el.type === "checkbox") return "checkbox";
 					if (el.type === "radio") return "radio";
 				}
 				return "value";
-			}
-			this.controlType = getControlType(el);
-			const eventName = this.controlType === "value" ? "input" : "change";
-
-			this.hasValue = (target, key) => {
+			},
+			hasValue(target, key) {
 				if (target instanceof Set) return target.has(key);
 				if (Array.isArray(target)) return target.includes(key);
 				if (typeof target === "object") return key in target;
 				return target == key;
-			};
-			this.writeArray = (target, array) => {
+			},
+			writeArray(target, array) {
 				if (target instanceof Set) return this.setValue(new Set(array));
 				if (Array.isArray(target)) return this.setValue(array);
 				if (typeof target === "object") return this.setValue(array.reduce((ac, k) => ({ ...ac, [k]: true }), {}));
 				return this.setValue(array[0]);
-			};
+			},
+		},
+		bind: function (el, v) {
+			this.watch([...this._path, "*"]);
+			this.controlType = this.extra.getControlType(el);
+			const eventName = this.controlType === "value" ? "input" : "change";
 
 			el.addEventListener(eventName, (e) => {
 				// get the current value again because ref may have changed since bind was called
@@ -108,13 +105,13 @@ services.push(
 						return this.setValue(el.value);
 					case "select":
 						const selected = Array.from(el.selectedOptions).map((opt) => opt.value);
-						this.writeArray(value, selected);
+						this.extra.writeArray(value, selected);
 						break;
 					default:
 						let checked = Array.from(document.getElementsByName(el.name))
 							.filter((i) => i.checked)
 							.map((i) => i.value);
-						this.writeArray(value, checked);
+						this.extra.writeArray(value, checked);
 						break;
 				}
 			});
@@ -126,55 +123,41 @@ services.push(
 					break;
 				case "select":
 					for (const opt of Array.from(el.options)) {
-						opt.selected = this.hasValue(value, opt.value);
+						opt.selected = this.extra.hasValue(value, opt.value);
 					}
 					break;
 				default:
-					el.checked = this.hasValue(value, el.value);
+					el.checked = this.extra.hasValue(value, el.value);
 					break;
 			}
 		},
-	}),
-);
-services.push(
-	new Directive("text", {
+	},
+	text: {
 		update: function (el, value) {
 			el.innerText = value;
 		},
-	}),
-);
-services.push(
-	new Directive("show", {
+	},
+	show: {
 		update: function (el, value) {
 			el.style.display = value ? "" : "none";
 		},
-	}),
-);
-services.push(
-	new Directive("enabled", {
+	},
+	enabled: {
 		update: function (el, value) {
 			el.disabled = !value;
 		},
-	}),
-);
-
-services.push(
-	new Directive("on-*", {
+	},
+	"on-*": {
 		bind: function (el, value) {
 			el.addEventListener(this.args[0], (e) => value(e, this.getScopeValues(), ...this.fnArgs));
 		},
-	}),
-);
-services.push(
-	new Directive("class-*", {
+	},
+	"class-*": {
 		update: function (el, value) {
 			el.classList.toggle(this.args.join("-"), value);
 		},
-	}),
-);
-
-services.push(
-	new Directive("if", {
+	},
+	if: {
 		update(el, value) {
 			if (value && !this.instance) {
 				let instance = el.content.cloneNode(true).firstElementChild;
@@ -187,22 +170,23 @@ services.push(
 				this.instance = undefined;
 			}
 		},
-	}),
-);
-
-services.push(
-	new Directive("attr-*", {
+	},
+	"attr-*": {
 		update: function (el, value) {
 			el.toggleAttribute(this.args.join("-"), value);
 		},
-	}),
-);
-services.push(
-	new Directive("prop-*", {
+	},
+	"prop-*": {
 		update: function (el, value) {
 			set(el, this.args, value);
 		},
-	}),
-);
+	},
+	"*": {
+		priority: 0,
+		update: function (el, value) {
+			el.setAttribute(this.args.join("-"), value);
+		},
+	},
+};
 
-export default services;
+export default directives;

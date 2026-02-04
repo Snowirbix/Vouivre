@@ -25,8 +25,8 @@ function getDebounced(target) {
 		debouncers.set(
 			target,
 			debounce(
-				(event, target, key) => {
-					requestUpdate(event, target, key);
+				(events, target, key) => {
+					requestUpdate(events, target, key);
 					debouncers.delete(target);
 				},
 				150,
@@ -37,8 +37,8 @@ function getDebounced(target) {
 	return debouncers.get(target);
 }
 
-function requestUpdate(event, target, key) {
-	event.dispatchEvent(
+function requestUpdate(events, target, key) {
+	events.dispatchEvent(
 		new CustomEvent("requestUpdate", {
 			detail: { target, key },
 		}),
@@ -52,7 +52,7 @@ function getKeyByValue(object, value) {
 const setAndMapReactiveFunctions = ["add", "clear", "delete", "set", "getOrInsert", "getOrInsertComputed"];
 
 export function createModel(data) {
-	let event = new EventTarget();
+	let events = new EventTarget();
 	let lookup = new WeakMap(); // proxy ref => parent proxy ref
 	let proxies = new WeakMap(); // obj ref => proxy ref because https://github.com/tc39/ecma262/issues/1198
 
@@ -60,7 +60,7 @@ export function createModel(data) {
 		get(target, key, receiver) {
 			if (key == "__isProxy") return true;
 			if (key == "__target") return target;
-			if (key == "__event") return event;
+			if (key == "__events") return events;
 			if (key == "__lookup") return lookup;
 
 			// reactify Set and Map
@@ -71,7 +71,7 @@ export function createModel(data) {
 						if (setAndMapReactiveFunctions.includes(key)) {
 							let parent = lookup.get(receiver);
 							let keyInParent = getKeyByValue(parent, receiver);
-							requestUpdate(event, parent, keyInParent);
+							requestUpdate(events, parent, keyInParent);
 						}
 						return result;
 					};
@@ -90,18 +90,18 @@ export function createModel(data) {
 			}
 			// array item moved
 			if (target instanceof Array && target.indexOf(value) > -1) {
-				getDebounced(receiver)(event, receiver, "length");
+				getDebounced(receiver)(events, receiver, "length");
 				return true;
 			}
 
-			requestUpdate(event, receiver, key);
+			requestUpdate(events, receiver, key);
 			return true;
 		},
 		deleteProperty(target, key) {
 			if (key in target) {
 				Reflect.deleteProperty(...arguments);
 				let receiver = proxies.get(target);
-				requestUpdate(event, receiver, key);
+				requestUpdate(events, receiver, key);
 				return true;
 			}
 			return false;

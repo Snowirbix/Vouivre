@@ -133,6 +133,21 @@ vouivre.bind(document.body, {
 })
 ```
 
+## Built-in Directives
+
+The asterisk * denotes a directive that receives an argument.  
+`v-foreach-*` creates one instance of the template foreach item in the array. Each instance has access to the array item using the variable name you pass as argument.  
+`v-text` sets the element text the same way as text interpolation does.  
+`v-show` changes the display of the element using css.  
+`v-if` adds or removes the element from the DOM depending on the value.  
+`v-enabled` enables or disables the element (for example a button).  
+`v-on-*` binds a function of the model to the event you pass as argument.  
+`v-class-*` adds or removes a css class.  
+`v-attr-*` adds or removes an HTML attribute.  
+`v-prop-*` sets the value of a property on the element.  
+`v-*` sets the value of an HTML attribute.
+
+
 ## Modifiers
 
 Modifiers are used to alter the value of a binding. They can format the value as time or percentage, or add simple logic like inverting a value with `not` or comparing with `is`. Modifiers are applied after the property path delimited by `:`. First comes the modifier name, and then a list of parameters if needed. You can also chain modifiers.
@@ -152,6 +167,15 @@ Parameters of the modifier can be model properties, scope variables or primitive
 ```html
 <button v-on-click="sort :call name">public</div>
 ```
+
+## Built-in Modifiers
+
+`watch [property1] [property2] ...` adds model properties to the list of dependencies to watch.  
+`not` inverts the value.  
+`is [propertyOrValue]` compares the value to the value of a model property or a primitive value.  
+`args [arg1] [arg2] ...` add arguments that will be passed to the event listeners bound with `on-*`.  
+`call [arg1] [arg2] ...` calls a function with the list of arguments.  
+`get [prop]` returns the property 'prop' of the object. Usually used when 'prop' is a variable name of a property of the object.  
 
 ## Computed properties
 
@@ -174,42 +198,64 @@ You can tell the binding what are the dependencies of this computed property wit
 
 ## Custom directives
 
-To create new directive with your own logic use vouivre.directive before binding the model.
+You can add your own custom directives to vouivre before binding the model to your view.
 
 ```js
-vouivre.directive("color", {
+vouivre.directives["color"] = {
 	bind(element, value) {
 		// called once before any update
 		// can be used to register event listeners
 	},
+	unbind(element, value) {
+		// unregister things
+	}
 	update(element, value) {
-		// called on every value change
+		// called on every watched properties value change
 		element.style.color = value;
+		// can call your own functions
+		this.extra.myFunction();
 	},
-});
+	// optional extra data and functions
+	extra: {
+		myFunction() {
+
+		}
+	},
+};
 ```
-Both hooks are optional.
+All hooks are optional. Another example, this time with an argument passed to the directive.
+
+```js
+vouivre.directives["on-*"] = {
+	bind: function (el, value) {
+		el.addEventListener(this.args[0], (e) => value(e));
+	},
+}
+```
 
 ## Custom modifiers
 
-The setup hook is optional and called once.  
-In this example we demonstrate another feature, watching changes on all properties of an object by adding `*` to the path.
+Modifiers work almost the same as directives, all hooks are optional, and the binding is accessible via this.binding.  
+This example uses another feature, the ability to watch changes on all properties of an object by adding `*` to the object path array.
 
 ```js
-vouivre.modifier("toString", {
-	setup(value) {
-		this.watch([...this._path, "*"]);
+vouivre.modifiers["toString"] = {
+	bind(value) {
+		this.binding.watch([...this._path, "*"]);
+	},
+	unbind(value) {
+		
 	},
 	read(value) {
 		if (value instanceof Object) {
-			return Object.keys(value);
+			return JSON.stringify(value);
 		}
 		return value.toString();
 	},
 	write(value) {
 		return value;
 	}
-});
+};
 vouivre.bind(document.body, { author: { firstName: "John", lastName: "Doe" } });
 ```
 ```html
@@ -218,7 +264,7 @@ vouivre.bind(document.body, { author: { firstName: "John", lastName: "Doe" } });
 
 ## Advanced example
 
-In this example we render a list of persons in a table with an input text to filter the entries and buttons on each column name to sort the list in ascending or descending order. The table body is filled by two imbricated foreach, one iterating the list and the other iterating the columns we chose to render.
+In this example we render a list of persons in a table with an input text to filter the entries and buttons on each column to sort the list in ascending or descending order by this column field. The table body is filled by two imbricated foreach, one iterating the list and the other iterating the columns we chose to render.
 
 ```html
 <input type="text" v-bind="filterName">
@@ -252,8 +298,8 @@ In this example we render a list of persons in a table with an input text to fil
 		<template v-foreach-person="filteredPersons">
 			<tr>
 				<th>{ $index }</th>
-				<template v-foreach-column="columns">
-					<td>{ person :get column }</td>
+				<template v-foreach-field="columns">
+					<td>{ person :get field }</td>
 				</template>
 			</tr>
 		</template>
