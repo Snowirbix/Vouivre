@@ -88,7 +88,8 @@ var directives = {
 			writeArray(target, array) {
 				if (target instanceof Set) return this.setValue(new Set(array));
 				if (Array.isArray(target)) return this.setValue(array);
-				if (typeof target === "object") return this.setValue(array.reduce((ac, k) => ({ ...ac, [k]: true }), {}));
+				if (typeof target === "object")
+					return this.setValue(array.reduce((ac, k) => ({ ...ac, [k]: true }), {}));
 				return this.setValue(array[0]);
 			},
 		},
@@ -105,13 +106,13 @@ var directives = {
 						return this.setValue(el.value);
 					case "select":
 						const selected = Array.from(el.selectedOptions).map((opt) => opt.value);
-						this.extra.writeArray(value, selected);
+						this.extra.writeArray.call(this, value, selected);
 						break;
 					default:
 						let checked = Array.from(document.getElementsByName(el.name))
 							.filter((i) => i.checked)
 							.map((i) => i.value);
-						this.extra.writeArray(value, checked);
+						this.extra.writeArray.call(this, value, checked);
 						break;
 				}
 			});
